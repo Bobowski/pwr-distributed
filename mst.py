@@ -8,8 +8,8 @@ class Node(Thread):
         Thread.__init__(self)
         # Vars
         self.uid = uid
-        self.is_groot = False
         self.papa = None
+        self.children = []
         self.neighbours = []
 
         self.q = Queue()
@@ -21,9 +21,11 @@ class Node(Thread):
         return self.__str__()
 
     def msg(self, *msg: tuple):
+        """ send message to this node """
         self.q.put(msg)
 
     def run(self):
+        """ simple on-receive loop - can be substituted by actors from some lib"""
         while True:
             while not self.q.empty():
                 title, val = self.q.get()
@@ -31,15 +33,21 @@ class Node(Thread):
             sleep(1)
 
     def look_im_your_papa(self, node):
+        """ parent --> child """
         if self.papa is None:
             # Sure you are
             self.papa = node
             # I'll tell my children they have a grandpa
             for n in self.neighbours:
                 n.msg("look_im_your_papa", self)
+            self.papa.msg("hey_papa", self)
         else:
             # I already have a papa
             pass
+
+    def hey_papa(self, node):
+        """ child --> parent """
+        self.children.append(node)
 
 
 def main():
@@ -57,11 +65,12 @@ def main():
     for n in nodes:
         n.start()
 
+    # Start spanning tree from node[0]
     nodes[0].msg("look_im_your_papa", nodes[0])
 
     sleep(3)
     for n in nodes:
-        print(n.papa)
+        print("{} : papa: {} children: {}".format(n, n.papa, n.children))
 
 
 if __name__ == "__main__":
