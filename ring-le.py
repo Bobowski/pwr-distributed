@@ -1,52 +1,59 @@
 from thespian.actors import *
-import time
 
 
 class Node(Actor):
     def receiveMessage(self, message, sender):
         funs = {
-            'init': self.init,
-            'elect': self.elect,
-            'conduct': self.conduct
+            'initialize': self.initialize,
+            'elect_start': self.elect_start,
+            'elect_pass': self.elect_pass
         }
         header, payload = message['header'], message['payload']
 
         # Handle the request
-        funs[header](payload, sender)
+        funs[header](message, sender)
 
-    @property
-    def is_leader(self):
-        return self.uid == self.leader_uid
-
-    def init(self, payload, sender):
-        self.uid = payload['uid']
+    def initialize(self, msg, sender):
+        # Obtain uid and neighbour to talk to
+        self.uid = msg['payload']['uid']
+        self.neighbour = msg['payload']['neighbour']
+        # As of now the leader is unknown
         self.leader_uid = -1
-        self.neighbour = payload['neighbour']
 
-    def elect(self, payload, sender):
-        msg = {
-            'header': 'conduct',
-            'payload': {'leader_uid': self.uid}
-        }
-        self.send(self.neighbour, msg)
+        # I'll notify this guy if I'll be the leader :)
+        self.master = sender
 
-    def conduct(self, payload, sender):
-        leader_uid = payload['leader_uid']
+    def elect_start(self, msg, sender):
+        # I'll start election procedure, just pass my uid to neighbour
+        self.send(
+            self.neighbour,
+            {'header': 'elect_pass', 'payload': {'uid': self.uid}}
+        )
 
+    def elect_pass(self, msg, sender):
+        # If my uid is bigger than the one that just came - DO NOT PASS
+
+        leader_uid = msg['payload']['uid']
         if leader_uid > self.uid:
+            # I'll write it to remember who is the (possible) leader
             self.leader_uid = leader_uid
-            self.send(self.neighbour, {'header': 'conduct', 'payload': payload})
+            # Share this good news with neighbour
+            self.send(self.neighbour, msg)
         if leader_uid == self.uid:
-            print("I'm leader", self.uid)
+            # Well, I'm the leader, I'll notify my master
+            self.send(self.master, "I'm the leader my master. Yours faithfully, {}".format(self.uid))
 
 
 def main():
-    actors = [ActorSystem().createActor(Node) for _ in range(10)]
+    actors = [ActorSystem().createActor(Node) for _ in range(100)]
     for i, a in enumerate(actors):
-        ActorSystem().tell(a, {'header': 'init', 'payload': {'uid': i, 'neighbour': actors[(i-1) % 10]}})
+        ActorSystem().tell(a, {'header': 'initialize', 'payload': {'uid': i, 'neighbour': actors[(i-1) % 100]}})
 
     for a in actors:
-        ActorSystem().tell(a, {'header': 'elect', 'payload': None})
+        ActorSystem().tell(a, {'header': 'elect_start', 'payload': None})
+
+    print(ActorSystem().listen(2))
+    ActorSystem().shutdown()
 
 
 if __name__ == "__main__":
